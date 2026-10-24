@@ -7,9 +7,10 @@ real people/companies.
 
 Search backends (in priority order):
 1. SERP API (Serper.dev) — if SERPER_API_KEY is set, reliable and fast
-2. DuckDuckGo HTML — free, no rate limiting, good fallback
-3. Bing — free, less aggressive than Google
-4. Google — aggressive rate limiting, used last
+2. TinyFish Search API — if TINYFISH_API_KEY is set, fast structured web search (12k free daily)
+3. DuckDuckGo HTML — free, no rate limiting, good fallback
+4. Bing — free, less aggressive than Google
+5. Google — aggressive rate limiting, used last
 
 Each cycle runs 2-3 queries max to avoid rate limits. Queries are
 tracked in the DB so they spread across heartbeat cycles.
@@ -326,9 +327,12 @@ class Scout:
             await asyncio.sleep(random.uniform(*SEARCH_DELAY))
 
         serper_key = getattr(self.env, "serper_api_key", "") or ""
+        tinyfish_key = getattr(self.env, "tinyfish_api_key", "") or ""
         backends = []
         if serper_key:
             backends.append(lambda: self._search_serper(query, serper_key))
+        if tinyfish_key:
+            backends.append(lambda: self._search_tinyfish(query, tinyfish_key))
         backends.extend([
             lambda: self._search_duckduckgo(query),
             lambda: self._search_bing(query),
@@ -386,6 +390,33 @@ class Scout:
             if not isinstance(item, dict):
                 continue
             url = item.get("link", "") or ""
+            snippet = item.get("snippet", "") or ""
+            if url:
+                results.append((url, snippet))
+        return results[:MAX_RESULTS_PER_QUERY]
+
+    async def _search_tinyfish(self, query: str, api_key: str) -> list[tuple[str, str]]:
+        """Search via TinyFish Search API — fast structured search, 12,000 free searches/day."""
+        resp = await self._fetch(
+            f"https://api.search.tinyfish.ai?query={quote_plus(query)}",
+            headers={"X-API-Key": api_key, "Accept": "application/json"},
+            retries=2,
+        )
+        if resp is None:
+            return []
+        try:
+            data = resp.json()
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(f"TinyFish returned non-JSON: {e}")
+            return []
+        if not isinstance(data, dict):
+            return []
+
+        results = []
+        for item in data.get("results", []) or []:
+            if not isinstance(item, dict):
+                continue
+            url = item.get("url", "") or ""
             snippet = item.get("snippet", "") or ""
             if url:
                 results.append((url, snippet))
