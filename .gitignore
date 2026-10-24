@@ -1,6 +1,8 @@
 # Environment
 .env
 *.env
+.vps_credentials
+vps_credentials*
 
 # Data
 data/
