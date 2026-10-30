@@ -119,6 +119,16 @@ def _new_counts(summary: dict) -> tuple[int, int]:
     return new, writable
 
 
+def _native_email(config) -> bool:
+    """Whether mail goes out through a native provider. That is what a draft
+    looks like there (an outbox row) versus a campaign on a legacy provider,
+    so the writable count the heartbeat decides from must know it."""
+    try:
+        return config.channels.email.provider in NATIVE_PROVIDERS
+    except AttributeError:
+        return False
+
+
 def unusable_backlog_notice(summary: dict) -> str:
     """Why Harvey paused prospecting for the day, or ""."""
     _, writable = _new_counts(summary)
@@ -153,7 +163,7 @@ async def decide_next_action(
     stayed open, and one waiting on the prospect can stay open for weeks.
     """
     if summary is None:
-        summary = await state.get_state_summary()
+        summary = await state.get_state_summary(native_email=_native_email(config))
 
     # Only prospects the Writer can draft for trigger writing: one with a
     # guessed email stays 'new' for good, and counting it starved Scout.
@@ -163,19 +173,20 @@ async def decide_next_action(
     # Drafts that can't deploy must not win the cycle: choosing send_campaign
     # for them every cycle would starve the writer and scout forever. That's
     # held Instantly drafts, any draft with the email channel off (the
-    # list-building setup), and native drafts while the kill switch is set
-    # (the Sender stages nothing until sending resumes).
+    # list-building setup), native drafts while the kill switch is set
+    # (the Sender stages nothing until sending resumes), and native providers
+    # in general (their drafts are the Outbox rows the sender drains every cycle).
     email = getattr(getattr(config, "channels", None), "email", None)
     native_paused = (summary.get("sending_paused")
                      and getattr(email, "provider", "") != "instantly")
-    held = (legacy_sending_held(config) or native_paused
+    held = (_native_email(config) or legacy_sending_held(config) or native_paused
             or not getattr(email, "enabled", True))
     deployable = 0 if held else draft_campaigns
 
     if deployable > 0:
         action, reason = "send_campaign", f"{draft_campaigns} draft campaign(s) ready to deploy"
     elif writable > 0:
-        action, reason = "write_campaign", f"{writable} new prospect(s) with no drafts ready"
+        action, reason = "write_campaign", f"{writable} prospect(s) with no draft ready"
     elif unusable_backlog_notice(summary):
         action, reason = "idle", "a day's worth of prospects with no usable email"
         logger.warning(unusable_backlog_notice(summary))
@@ -384,7 +395,9 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
                 action = "quiet_hours_send"
             else:
                 logger.info("Checking pipeline state...")
-                summary = await state.get_state_summary()
+                summary = await state.get_state_summary(
+                    native_email=_native_email(config)
+                )
                 action = await decide_next_action(brain, state, config, summary=summary)
 
             # 5. Execute — run independent agents in parallel where possible
