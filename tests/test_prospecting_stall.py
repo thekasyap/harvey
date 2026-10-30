@@ -161,3 +161,28 @@ async def test_an_auto_reply_is_handed_to_a_human_not_left_open(tmp_path, monkey
     await handler._process_reply("jane@acme.example", "I'm away until Monday.", "u1")
     assert await state.get_conversations_by_status("open") == []
     assert [c.prospect_id for c in await state.get_conversations_by_status("needs_human")] == [pid]
+
+
+def email_config(**email):
+    return SimpleNamespace(channels=SimpleNamespace(email=SimpleNamespace(
+        **{"provider": "gmail", "require_approval": True, "enabled": True, **email})))
+
+
+@pytest.mark.asyncio
+async def test_drafts_with_the_email_channel_off_do_not_starve_prospecting():
+    # The list-building setup: the Sender returns at once with email off, so
+    # a draft stays a draft and choosing send_campaign for it never ends.
+    summary = {"prospects": {"new": 0}, "draft_campaigns": 1, "open_conversations": 0}
+    assert await decide_next_action(
+        None, None, email_config(enabled=False), summary=summary) == "prospect"
+
+
+@pytest.mark.asyncio
+async def test_native_drafts_while_sending_is_paused_do_not_starve_prospecting():
+    # The kill switch stops native staging, not finding or writing.
+    summary = {"prospects": {"new": 0}, "draft_campaigns": 1,
+               "open_conversations": 0, "sending_paused": True}
+    assert await decide_next_action(None, None, email_config(), summary=summary) == "prospect"
+    summary["prospects"] = {"new": 2}
+    summary["writable_prospects"] = 2
+    assert await decide_next_action(None, None, email_config(), summary=summary) == "write_campaign"
