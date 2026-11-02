@@ -173,13 +173,15 @@ async def decide_next_action(
     # Drafts that can't deploy must not win the cycle: choosing send_campaign
     # for them every cycle would starve the writer and scout forever. That's
     # held Instantly drafts, any draft with the email channel off (the
-    # list-building setup), native drafts while the kill switch is set
-    # (the Sender stages nothing until sending resumes), and native providers
-    # in general (their drafts are the Outbox rows the sender drains every cycle).
+    # Drafts that can't deploy must not win the cycle: choosing send_campaign
+    # for them every cycle would starve the writer and scout forever. That's
+    # held Instantly drafts, any draft with the email channel off (the
+    # list-building setup), and native drafts while the kill switch is set
+    # (the Sender stages nothing until sending resumes).
     email = getattr(getattr(config, "channels", None), "email", None)
     native_paused = (summary.get("sending_paused")
                      and getattr(email, "provider", "") != "instantly")
-    held = (_native_email(config) or legacy_sending_held(config) or native_paused
+    held = (legacy_sending_held(config) or native_paused
             or not getattr(email, "enabled", True))
     deployable = 0 if held else draft_campaigns
 
@@ -403,7 +405,9 @@ async def heartbeat(stop_event: asyncio.Event | None = None):
             # 5. Execute — run independent agents in parallel where possible
             # Handler is always safe to run alongside other agents
             tasks = []
-            has_open_convos = summary.get("open_conversations", 0) > 0
+            # An auto-reply handed to you was open until now: keep reading for it.
+            has_open_convos = (summary.get("open_conversations", 0)
+                               + summary.get("auto_reply_handoffs", 0)) > 0
 
             if action == "prospect":
                 tasks.append(("prospect", scout.run()))
