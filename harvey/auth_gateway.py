@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from harvey.paths import PROJECT_ROOT
+from sellbird.paths import PROJECT_ROOT
 
 load_dotenv(PROJECT_ROOT / ".env")
 

@@ -1,11 +1,165 @@
 # Changelog
 
-Notable changes to Harvey. Dates are release dates; the format follows
+Notable changes to Sellbird, called Harvey until 0.4.0. Dates are release dates; the format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) loosely and versions
 follow [semver](https://semver.org/), with the caveat that Harvey is pre-1.0 and
 minor versions can still change behaviour.
 
 ## [Unreleased]
+
+### Changed
+
+- Seeding the signal catalog writes only a signal that is missing or whose catalog text changed. The dashboard seeds on every Today load, so this was a write per signal on every page view.
+- **The opt-out line takes any wording.** `compliance.opt_out_line` no longer
+  has to ask for a keyword: "Not interested? Just let me know and I won't email
+  you again." is the new default. Clear phrases are still caught by rule, and
+  the model reads every other reply for a request to stop. The line must still
+  say the emails can stop, however it's worded, so a sign-off like "Cheers!" is
+  refused; `""` leaves the line off on purpose. A link or an email address is
+  still refused.
+
+### Security
+
+- **Autopilot holds phone numbers and money requests.** An email nobody
+  approved now waits in the Outbox when it gives a phone number that isn't
+  yours (`channels.email.phone_numbers`, or one in your postal address) or
+  asks the reader to send money (wire or bank transfer, IBAN, crypto, gift
+  cards and the like), as it already did for links to domains that aren't
+  yours. A planted "call this number instead" can't go out on its own.
+- **Training reads your website as data.** The pages `sellbird train` crawls
+  are fenced as untrusted text, like replies and research already were, so
+  a comment or review on your site can't steer what training writes into
+  every later email.
+
+### Added
+
+- **A menu-bar app.** `sellbird tray` (macOS menu bar, Windows tray)
+  starts the dashboard when needed, starts and stops Sellbird, pauses and
+  resumes sending and opens the dashboard unlocked. `sellbird autostart
+  install` starts it at login. See "The menu-bar app" in
+  [docs/configuration.md](docs/configuration.md).
+- **Several sending inboxes.** Besides the main mailbox, connect Gmail,
+  Microsoft 365 or SMTP inboxes you already own with
+  `sellbird inboxes connect`. Their sign-ins and passwords live in the
+  system keychain. Each new thread goes to the inbox with the most room;
+  follow-ups and replies leave from the thread's own inbox. Each inbox has
+  its own daily cold cap (`channels.email.per_inbox_daily_cap`, or your own
+  number) and warmup ramp, and can be paused, renamed, removed or limited
+  to some campaigns. Replies are read from every inbox. With one inbox
+  nothing changes. The dashboard's Inboxes tab shows them, opens each one
+  to pause, cap, rename or remove it, and adds one (a Gmail or Microsoft
+  sign-in in your browser, or an SMTP password that goes straight to your
+  keychain). Your coding agent can list them and pause one, never add or
+  remove one. See "Several sending inboxes" in
+  [docs/configuration.md](docs/configuration.md).
+- **An MCP server for your coding agent.** `sellbird mcp install` adds
+  Sellbird to Claude Code (or Codex), showing the change first. The agent
+  reads everything Sellbird knows, estimates discovery costs and can pause
+  sending, through the running dashboard with its own token
+  (`data/agent-token`). Every approval, setting, key, purchase and resume
+  stays yours: the agent's token reaches only a short allowlist of routes.
+  An extension can add tools and open its own routes to the agent. See
+  "Your coding agent (MCP)" in [docs/configuration.md](docs/configuration.md).
+- **Suppressions.** Addresses and whole domains Sellbird never emails,
+  kept in the database: an opt-out or a bounce adds the address, and
+  `sellbird suppressions` lists, adds and removes them. A suppressed domain
+  covers its subdomains. Nothing suppressed is staged, sent, or uploaded to
+  Instantly. Undoing someone's opt-out lifts its suppression too.
+  `compliance.do_not_contact` stays the hand-kept list in `sellbird.yaml`.
+- **Send rules and headers for extensions.** An extension can hold or cancel
+  an email after Sellbird's own checks, and add headers such as
+  `List-Unsubscribe`. An email that needs headers its inbox can't carry
+  waits rather than going out without them. See [docs/extensions.md](docs/extensions.md).
+- **Mail providers take who they send as, and where their sign-in lives.**
+  Gmail, Microsoft 365 and SMTP accept an identity (address and name; the
+  persona by default), Gmail and Microsoft a token source (the token file by
+  default) and an httpx transport, and SMTP its own server settings, so a
+  caller can connect more than one inbox. Signing in as a different account
+  than the inbox being connected saves nothing.
+- **Extensions.** A separate package can add dashboard routes, steps that
+  run each heartbeat cycle and `sellbird` subcommands through the
+  `sellbird.extensions` entry point, without patching Sellbird. A failing
+  extension stops Sellbird with its name; a failing step is logged and
+  skipped. `sellbird.dashboard.build_app(guard=, routers=)` serves the
+  dashboard for someone else, with its own sign-in and a per-request home.
+  See [docs/extensions.md](docs/extensions.md).
+- **Storage and settings seams.** Every database open goes through
+  `sellbird.storage`: SQLite paths as before, or `<prefix>:<name>` for a
+  backend an extension registers (in code or through the `sellbird.storage`
+  entry point), which owns and checks its own schema. `sellbird.config.use_config`
+  sets the config `load_config()` returns for a task and its threads, for
+  settings kept somewhere other than `sellbird.yaml`. A self-hosted install
+  behaves exactly as before.
+- **Runs from a home folder, not only from a checkout.** Installed with `pip`
+  or `pipx`, Sellbird used to look for its config, prompts and skills inside
+  site-packages. Now one home folder holds them: `SELLBIRD_HOME` if set, else
+  the checkout (unchanged), else the per-user data folder. The package ships
+  the defaults and copies in what's missing on first run, never overwriting
+  your edits. The Docker image sets `SELLBIRD_HOME=/app`. See "Where your
+  files live" in the README.
+- **Verifier API keys stay out of logs** (from #185 by @techity-mushtaque).
+  Hunter's key now goes in the `X-API-KEY` header; Reoon and ZeroBounce only
+  take it in the URL, so the `httpx` and `httpcore` loggers stay at WARNING and
+  Sellbird's own debug lines blank the key out of error text.
+- **`channels.email.min_write_score`** (default 0): the writer skips prospects
+  scored below it. Scout also checks `compliance.do_not_contact` before
+  reading a listed company's site or spending verification credits on it.
+- **A free Precleared key in one step** (from #121 by @gabrielaoimevbore-beep).
+  `sellbird setup` now offers to get a free key for the cold-email check with
+  just an email address, instead of sending people to a web page and back, and
+  `sellbird precleared-key` does the same later (`--email` asks nothing, for a
+  coding agent setting Sellbird up). The key is saved in `.env` as
+  `PRECLEARED_API_KEY` and never printed. When the keyless allowance (10 checks
+  a day) runs out, the Today page, `sellbird status` and the Outbox reason point
+  to the command. Free keys now give 100 checks a day for their first 14 days,
+  then 25, and the docs say so.
+
+### Changed
+
+- **`Referrer-Policy: same-origin`** on the dashboard, instead of
+  `no-referrer`: under `no-referrer` Firefox sends `Origin: null` on POSTs,
+  which the dashboard's provenance check refuses. Other sites still never
+  get a Referer.
+- **Microsoft 365: a send that may have gone out keeps its draft.** A 5xx or
+  a dropped connection on the final send no longer deletes the draft, and
+  the Outbox marks the email as possibly sent (never retried). A 4xx refusal
+  still deletes it. Any provider that reports a possible send is marked the
+  same way.
+
+### Fixed
+
+- **Instantly's daily cap counts your local day, not UTC** (from #177 by
+  @solvejet-team), so the cap resets at your midnight.
+
+## [0.4.0] - 2026-11-06
+
+### Changed
+
+- **Harvey is now Sellbird.** The package, the `sellbird` command,
+  `sellbird.yaml` and `sellbird.local.yaml`, `data/sellbird.db`, `SELLBIRD_*`
+  settings and the Docker service all carry the new name. An existing clone
+  upgrades with `git pull && pip install -e .`. On first run Sellbird moves
+  `harvey.local.yaml` and `data/harvey.*` to the new names. It never
+  overwrites, and waits while a Harvey process is still running.
+  `HARVEY_*` settings still apply. `harvey` and `python -m harvey` keep
+  working for now and say they moved. See "Upgrading from Harvey" in the
+  README. After an upgrade moves files, the dashboard's Today screen says
+  "Harvey is now Sellbird" once, until you dismiss it.
+- **The agent no longer calls itself by the product's name.** The prompts
+  described the model as Harvey ("like Harvey Specter"), and the default and
+  trained sender was Harvey at harvey@your-domain. The default sender is now
+  Alex. Messages saved before the rename still count as ours in reply
+  history.
+- **Logo.** The dashboard shows the Sellbird swallow and favicon.
+- **License: AGPL-3.0.** From 0.4.0 Sellbird is licensed under the GNU
+  Affero General Public License v3.0 only. Releases up to 0.3.x stay MIT, and
+  that code keeps its MIT notice in `NOTICE`. New commits are signed off
+  under the Developer Certificate of Origin (see `CONTRIBUTING.md`).
+- **A shorter README.** The front page covers what Sellbird does, the quick
+  start and upgrading from Harvey. The detailed sections moved unchanged into
+  `docs/`, with a new dashboard recording and screenshots. Added
+  `SECURITY.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md` and issue and pull
+  request templates.
 
 ### Added
 
