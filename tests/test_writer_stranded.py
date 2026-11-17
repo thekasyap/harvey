@@ -21,11 +21,11 @@ from types import SimpleNamespace
 import pytest
 import pytest_asyncio
 
-from harvey.agents.writer import Writer
-from harvey.main import decide_next_action
-from harvey.models.campaign import Campaign, EmailStep
-from harvey.models.prospect import Prospect
-from harvey.state import (
+from sellbird.agents.writer import Writer
+from sellbird.main import decide_next_action
+from sellbird.models.campaign import Campaign, EmailStep
+from sellbird.models.prospect import Prospect
+from sellbird.state import (
     MAX_WRITE_ATTEMPTS,
     PERSONAL_ATTEMPTS_KEY,
     StateManager,
