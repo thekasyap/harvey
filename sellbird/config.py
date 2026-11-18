@@ -39,6 +39,7 @@ class PersonaConfig(BaseModel):
     email: str
     linkedin: str
     tone: str
+    phone: str = ""
 
 
 class OfferConfig(BaseModel):

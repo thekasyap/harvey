@@ -480,10 +480,13 @@ def _is_our_number(number: str, ours: set[str]) -> bool:
 
 
 def own_phone_numbers(config) -> set[str]:
-    """Your numbers: channels.email.phone_numbers, and any in your postal address."""
+    """Your numbers: channels.email.phone_numbers, persona.phone, and any in your postal address."""
     email_cfg = getattr(getattr(config, "channels", None), "email", None)
+    persona = getattr(config, "persona", None)
     compliance = getattr(config, "compliance", None)
     out = {_digits(str(n)) for n in (getattr(email_cfg, "phone_numbers", None) or [])}
+    if getattr(persona, "phone", ""):
+        out.add(_digits(str(persona.phone)))
     out.update(_digits(n) for n in find_phone_numbers(str(getattr(compliance, "postal_address", "") or "")))
     return {d for d in out if len(d) >= 7}
 
